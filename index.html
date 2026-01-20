@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Финансовый дашборд</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 Финансовый дашборд</h1>
+            <div class="header-controls">
+                <select id="yearSelect">
+                    <option value="2026">2026</option>
+                </select>
+                <select id="monthSelect">
+                    <option value="1">Январь</option>
+                    <option value="2">Февраль</option>
+                    <option value="3">Март</option>
+                    <option value="4">Апрель</option>
+                    <option value="5">Май</option>
+                    <option value="6">Июнь</option>
+                    <option value="7">Июль</option>
+                    <option value="8">Август</option>
+                    <option value="9">Сентябрь</option>
+                    <option value="10">Октябрь</option>
+                    <option value="11">Ноябрь</option>
+                    <option value="12">Декабрь</option>
+                </select>
+                <button id="refreshBtn">🔄 Обновить</button>
+                <button id="addIncomeBtn" class="btn-add">➕ Доход</button>
+                <button id="addExpenseBtn" class="btn-add">➖ Расход</button>
+                <a href="analytics.html" class="btn-add">📊 Аналитика</a>
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <!-- Карточки с основными показателями -->
+            <div class="stats-grid">
+                <div class="stat-card income">
+                    <h3>Доходы (план)</h3>
+                    <div class="stat-value" id="totalIncome">0 ₽</div>
+                </div>
+                <div class="stat-card expense">
+                    <h3>Расходы (план)</h3>
+                    <div class="stat-value" id="totalExpenses">0 ₽</div>
+                </div>
+                <div class="stat-card paid">
+                    <h3>Оплачено</h3>
+                    <div class="stat-value" id="totalPaid">0 ₽</div>
+                </div>
+                <div class="stat-card balance">
+                    <h3>Остаток</h3>
+                    <div class="stat-value" id="totalBalance">0 ₽</div>
+                </div>
+            </div>
+
+            <!-- Графики -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>Доходы и расходы</h3>
+                    <canvas id="incomeExpenseChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>Расходы по категориям</h3>
+                    <canvas id="expensesChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Таблицы -->
+            <div class="tables-grid">
+                <div class="table-card">
+                    <h3>Плановые доходы</h3>
+                    <div class="table-container">
+                        <table id="incomesTable">
+                            <thead>
+                                <tr>
+                                    <th>Дата</th>
+                                    <th>Источник</th>
+                                    <th>Сумма</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="table-card">
+                    <h3>Плановые расходы</h3>
+                    <div class="table-container">
+                        <table id="expensesTable">
+                            <thead>
+                                <tr>
+                                    <th>Категория</th>
+                                    <th>Сумма</th>
+                                    <th>Срок оплаты</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="table-card">
+                    <h3>Оставшиеся платежи</h3>
+                    <div class="table-container">
+                        <table id="remainingTable">
+                            <thead>
+                                <tr>
+                                    <th>Категория</th>
+                                    <th>Сумма</th>
+                                    <th>Срок оплаты</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/telegram.js"></script>
+    <script src="js/modal.js"></script>
+    <script src="js/forms.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

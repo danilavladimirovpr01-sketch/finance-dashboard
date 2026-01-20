@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Аналитика - Финансовый дашборд</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Аналитика</h1>
+            <div class="header-controls">
+                <select id="yearSelect">
+                    <option value="2026">2026</option>
+                </select>
+                <a href="index.html" class="btn-back">← Назад</a>
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <div class="chart-card">
+                <h3>Доходы и расходы по месяцам</h3>
+                <canvas id="monthlyChart"></canvas>
+            </div>
+
+            <div class="chart-card">
+                <h3>Сравнение плана и факта</h3>
+                <canvas id="planFactChart"></canvas>
+            </div>
+
+            <div class="table-card">
+                <h3>Сводка за год</h3>
+                <div class="table-container">
+                    <table id="summaryTable">
+                        <thead>
+                            <tr>
+                                <th>Месяц</th>
+                                <th>План доходов</th>
+                                <th>План расходов</th>
+                                <th>Остаток</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/telegram.js"></script>
+    <script src="js/analytics.js"></script>
+</body>
+</html>
