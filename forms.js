@@ -62,26 +62,7 @@ function showAddIncomeForm(year, month, onSuccess) {
                     return;
                     
                     /* Временно отключено - нужен backend или GitHub API с токеном
-                    const initData = window.TelegramWebApp ? window.TelegramWebApp.getInitData() : null;
-                    const headers = {
-                        'Content-Type': 'application/json'
-                    };
-                    if (initData) {
-                        headers['X-Telegram-Init-Data'] = initData;
-                    }
-                    
-                    const response = await fetch(`${API_BASE_URL}/api/plans/${year}/${month}/incomes`, {
-                        method: 'POST',
-                        headers: headers,
-                        body: JSON.stringify(data)
-                    });
-                    
-                    if (!response.ok) {
-                        const error = await response.json();
-                        throw new Error(error.detail || 'Ошибка при добавлении дохода');
-                    }
-                    
-                    showNotification('Доход успешно добавлен', 'success');
+                    // Код для редактирования будет добавлен позже
                     */
                     if (onSuccess) onSuccess();
                     
