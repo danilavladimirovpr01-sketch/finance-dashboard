@@ -29,10 +29,14 @@ function setGitHubToken(token) {
 /**
  * Получить содержимое файла из GitHub через Raw API
  */
-async function getFileFromGitHub(filePath) {
+async function getFileFromGitHub(filePath, bypassCache = false) {
     try {
-        const url = `${GITHUB_RAW_BASE}/${filePath}`;
-        const response = await fetch(url);
+        // Добавляем timestamp для обхода кэша, если нужно
+        const cacheBuster = bypassCache ? `?t=${Date.now()}` : '';
+        const url = `${GITHUB_RAW_BASE}/${filePath}${cacheBuster}`;
+        const response = await fetch(url, {
+            cache: bypassCache ? 'no-cache' : 'default'
+        });
         
         if (!response.ok) {
             if (response.status === 404) {
@@ -52,9 +56,9 @@ async function getFileFromGitHub(filePath) {
 /**
  * Получить план на месяц
  */
-async function getPlan(year, month) {
+async function getPlan(year, month, bypassCache = false) {
     const filePath = `${FINANCES_PATH}/${year}/Plans/Plan_${year}_${month.toString().padStart(2, '0')}.md`;
-    const content = await getFileFromGitHub(filePath);
+    const content = await getFileFromGitHub(filePath, bypassCache);
     
     if (!content) {
         return null;
@@ -67,9 +71,9 @@ async function getPlan(year, month) {
 /**
  * Получить фактические данные за месяц
  */
-async function getFact(year, month) {
+async function getFact(year, month, bypassCache = false) {
     const filePath = `${FINANCES_PATH}/${year}/Facts/Fact_${year}_${month.toString().padStart(2, '0')}.md`;
-    const content = await getFileFromGitHub(filePath);
+    const content = await getFileFromGitHub(filePath, bypassCache);
     
     if (!content) {
         return null;
