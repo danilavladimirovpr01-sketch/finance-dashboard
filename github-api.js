@@ -598,3 +598,31 @@ function moveExpenseToPaid(content, category, amount, paymentDate) {
             const tableHeader = [
                 '',
                 '| Категория | Сумма (руб.) | Дата оплаты | Примечание |',
+                '|---|---|---|---|',
+                newPaidRow
+            ];
+            lines.splice(paidSectionStart + 1, 0, ...tableHeader);
+        }
+    }
+    
+    return lines.join('\n');
+}
+
+/**
+ * Форматировать сумму с пробелами для тысяч
+ */
+function formatAmount(amount) {
+    return new Intl.NumberFormat('ru-RU').format(amount);
+}
+
+// Экспортируем функции
+window.GitHubAPI = {
+    getPlan,
+    getFact,
+    getFileFromGitHub,
+    addIncomeToPlan,
+    addExpenseToPlan,
+    markExpenseAsPaid,
+    getGitHubToken,
+    setGitHubToken
+};
