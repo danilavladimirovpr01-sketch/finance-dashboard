@@ -208,26 +208,73 @@ window.markAsPaid = async function(category, amount) {
             return;
         }
         
+        // СРАЗУ обновляем UI (оптимистичное обновление)
+        updateExpensePaidStatus(category, amount, true);
+        
         // Получаем текущую дату в формате ДД.ММ.ГГГГ
         const today = new Date();
         const paymentDate = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
         
-        // Отмечаем расход как оплаченный через GitHub API
-        showNotification('Отметка расхода как оплаченного...', 'info');
-        await window.GitHubAPI.markExpenseAsPaid(year, month, category, amount, paymentDate);
-        showNotification('Расход отмечен как оплаченный! Обновление данных...', 'success');
+        // Отмечаем расход как оплаченный через GitHub API (в фоне)
+        window.GitHubAPI.markExpenseAsPaid(year, month, category, amount, paymentDate)
+            .then(() => {
+                // После успешного обновления на GitHub - обновляем данные
+                setTimeout(() => loadData(true), 500);
+            })
+            .catch((error) => {
+                console.error('Ошибка обновления на GitHub:', error);
+                // Откатываем изменения в UI при ошибке
+                updateExpensePaidStatus(category, amount, false);
+                showNotification('Ошибка при сохранении на GitHub', 'error');
+            });
         
-        // Ждем 2 секунды, чтобы GitHub успел обновить файл
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Перезагружаем данные с обходом кэша
-        await loadData(true);
+        showNotification('Расход отмечен как оплаченный!', 'success');
         
     } catch (error) {
         console.error('Ошибка:', error);
+        updateExpensePaidStatus(category, amount, false);
         showNotification(error.message || 'Ошибка при отметке расхода', 'error');
     }
 };
+
+// Функция для мгновенного обновления статуса расхода в UI
+function updateExpensePaidStatus(category, amount, isPaid) {
+    // Обновляем галочку в таблице
+    const tbody = document.querySelector('#expensesTable tbody');
+    const rows = tbody.querySelectorAll('tr');
+    
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 4) {
+            const rowCategory = cells[0].textContent.trim();
+            const rowAmount = parseAmount(cells[1].textContent);
+            
+            if (rowCategory === category && Math.abs(rowAmount - amount) < 0.01) {
+                const button = cells[3].querySelector('button');
+                if (button) {
+                    if (isPaid) {
+                        button.classList.add('active');
+                        button.title = 'Оплачено';
+                    } else {
+                        button.classList.remove('active');
+                        button.title = 'Отметить как оплаченный';
+                    }
+                }
+            }
+        }
+    });
+    
+    // Обновляем сумму "Оплачено" вверху
+    if (isPaid) {
+        const currentPaid = parseAmount(document.getElementById('totalPaid').textContent);
+        const newPaid = currentPaid + amount;
+        document.getElementById('totalPaid').textContent = formatCurrency(newPaid);
+    } else {
+        const currentPaid = parseAmount(document.getElementById('totalPaid').textContent);
+        const newPaid = Math.max(0, currentPaid - amount);
+        document.getElementById('totalPaid').textContent = formatCurrency(newPaid);
+    }
+}
 
 
 function updateIncomeExpenseChart(data) {
