@@ -367,6 +367,7 @@ function addIncomeToMarkdown(content, incomeData) {
     let inIncomesSection = false;
     let tableStartIndex = -1;
     let tableEndIndex = -1;
+    let foundSeparator = false;
     
     // Находим секцию доходов и таблицу
     for (let i = 0; i < lines.length; i++) {
@@ -384,14 +385,22 @@ function addIncomeToMarkdown(content, incomeData) {
         }
         
         if (inIncomesSection && tableStartIndex >= 0 && line.startsWith('|---')) {
-            tableEndIndex = i;
+            foundSeparator = true;
             continue;
         }
         
-        // Если нашли строку "Итого" или следующую секцию, заканчиваем
-        if (inIncomesSection && tableStartIndex >= 0 && (lineLower.includes('итого') || line.startsWith('##'))) {
-            tableEndIndex = i - 1;
-            break;
+        // После разделителя отслеживаем строки данных
+        if (inIncomesSection && tableStartIndex >= 0 && foundSeparator) {
+            // Если это строка данных (начинается с | и не содержит "Итого")
+            if (line.startsWith('|') && !lineLower.includes('итого')) {
+                tableEndIndex = i; // Обновляем индекс последней строки данных
+                continue;
+            }
+            
+            // Если нашли строку "Итого" или следующую секцию, заканчиваем
+            if (lineLower.includes('итого') || line.startsWith('##')) {
+                break;
+            }
         }
     }
     
@@ -405,7 +414,7 @@ function addIncomeToMarkdown(content, incomeData) {
     // Создаем новую строку таблицы
     const newRow = `| ${incomeData.date} | ${incomeData.source} | ${formattedAmount} | ${incomeData.note || ''} |`;
     
-    // Вставляем новую строку после заголовка таблицы
+    // Вставляем новую строку после последней строки данных (перед "Итого")
     lines.splice(tableEndIndex + 1, 0, newRow);
     
     return lines.join('\n');
@@ -580,12 +589,3 @@ function formatAmount(amount) {
 
 // Экспортируем функции
 window.GitHubAPI = {
-    getPlan,
-    getFact,
-    getFileFromGitHub,
-    addIncomeToPlan,
-    addExpenseToPlan,
-    markExpenseAsPaid,
-    getGitHubToken,
-    setGitHubToken
-};
