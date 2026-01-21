@@ -90,6 +90,7 @@ function parsePlanMarkdown(content) {
     const remainingExpenses = [];
     
     let currentSection = null;
+    let inTable = false;
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -97,15 +98,16 @@ function parsePlanMarkdown(content) {
         
         // Определяем секцию (только для заголовков уровня ##, не ###)
         if (line.startsWith('##') && !line.startsWith('###')) {
-            if (lineLower.includes('планируемые доходы') || lineLower.includes('плановые доходы') || (lineLower.includes('доходы') && !lineLower.includes('расходы'))) {
+            inTable = false;
+            if (lineLower.includes('планируемые доходы') || lineLower.includes('плановые доходы')) {
                 currentSection = 'incomes';
                 continue;
             }
-            if (lineLower.includes('планируемые расходы') || lineLower.includes('плановые расходы') || (lineLower.includes('расходы') && !lineLower.includes('доходы') && !lineLower.includes('оплаченные') && !lineLower.includes('оставшиеся'))) {
+            if (lineLower.includes('планируемые расходы') || lineLower.includes('плановые расходы')) {
                 currentSection = 'expenses';
                 continue;
             }
-            if (lineLower.includes('фактически оплаченные расходы') || lineLower.includes('оплаченные расходы') || (lineLower.includes('оплаченные') && lineLower.includes('расходы'))) {
+            if (lineLower.includes('фактически оплаченные расходы') || lineLower.includes('оплаченные расходы')) {
                 currentSection = 'paid';
                 continue;
             }
@@ -113,12 +115,11 @@ function parsePlanMarkdown(content) {
                 currentSection = 'remaining';
                 continue;
             }
-            // Если встретили другой заголовок уровня ##, сбрасываем секцию
-            if (line.startsWith('##')) {
-                // Не сбрасываем, если это не новая секция расходов/доходов
-                if (!lineLower.includes('доходы') && !lineLower.includes('расходы') && !lineLower.includes('баланс') && !lineLower.includes('заметки')) {
-                    // Продолжаем в текущей секции
-                }
+            // Если встретили другие секции (Баланс, Заметки), сбрасываем секцию
+            if (lineLower.includes('баланс') || lineLower.includes('заметки')) {
+                currentSection = null;
+                inTable = false;
+                continue;
             }
         }
         
@@ -131,12 +132,18 @@ function parsePlanMarkdown(content) {
                 continue;
             }
             
-            if (cells.length >= 3) {
+            // Определяем, это заголовок таблицы или данные
+            const isHeader = (lineLower.includes('дата') && lineLower.includes('источник') && lineLower.includes('сумма')) ||
+                            (lineLower.includes('категория') && lineLower.includes('сумма'));
+            
+            if (isHeader) {
+                inTable = true;
+                continue;
+            }
+            
+            // Если мы в таблице и это не заголовок, парсим данные
+            if (inTable && cells.length >= 3 && currentSection) {
                 if (currentSection === 'incomes') {
-                    // Пропускаем заголовок таблицы
-                    if (lineLower.includes('дата') && lineLower.includes('источник') && lineLower.includes('сумма')) {
-                        continue;
-                    }
                     incomes.push({
                         date: cells[0] || '',
                         source: cells[1] || '',
@@ -144,10 +151,6 @@ function parsePlanMarkdown(content) {
                         note: cells[3] || ''
                     });
                 } else if (currentSection === 'expenses') {
-                    // Пропускаем заголовок таблицы
-                    if (lineLower.includes('категория') && lineLower.includes('сумма')) {
-                        continue;
-                    }
                     expenses.push({
                         category: cells[0] || '',
                         amount: parseAmount(cells[1] || '0'),
@@ -155,10 +158,6 @@ function parsePlanMarkdown(content) {
                         note: cells[3] || ''
                     });
                 } else if (currentSection === 'paid') {
-                    // Пропускаем заголовок таблицы
-                    if (lineLower.includes('категория') && lineLower.includes('сумма')) {
-                        continue;
-                    }
                     paidExpenses.push({
                         category: cells[0] || '',
                         amount: parseAmount(cells[1] || '0'),
@@ -166,10 +165,6 @@ function parsePlanMarkdown(content) {
                         note: cells[3] || ''
                     });
                 } else if (currentSection === 'remaining') {
-                    // Пропускаем заголовок таблицы
-                    if (lineLower.includes('категория') && lineLower.includes('сумма')) {
-                        continue;
-                    }
                     remainingExpenses.push({
                         category: cells[0] || '',
                         amount: parseAmount(cells[1] || '0'),
@@ -178,6 +173,9 @@ function parsePlanMarkdown(content) {
                     });
                 }
             }
+        } else if (line.startsWith('|---')) {
+            // Разделитель таблицы - подтверждаем, что мы в таблице
+            inTable = true;
         }
     }
     
@@ -598,3 +596,5 @@ function moveExpenseToPaid(content, category, amount, paymentDate) {
         } else {
             // Если нет таблицы, создаем её
             const tableHeader = [
+                '',
+                '| Категория | Сумма (руб.) | Дата оплаты | Примечание |',
