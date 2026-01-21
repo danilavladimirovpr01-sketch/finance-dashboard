@@ -589,3 +589,12 @@ function formatAmount(amount) {
 
 // Экспортируем функции
 window.GitHubAPI = {
+    getPlan,
+    getFact,
+    getFileFromGitHub,
+    addIncomeToPlan,
+    addExpenseToPlan,
+    markExpenseAsPaid,
+    getGitHubToken,
+    setGitHubToken
+};
