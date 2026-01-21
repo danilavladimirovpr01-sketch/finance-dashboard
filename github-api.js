@@ -90,7 +90,6 @@ function parsePlanMarkdown(content) {
     const remainingExpenses = [];
     
     let currentSection = null;
-    let inTable = false;
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -98,7 +97,6 @@ function parsePlanMarkdown(content) {
         
         // Определяем секцию (только для заголовков уровня ##, не ###)
         if (line.startsWith('##') && !line.startsWith('###')) {
-            inTable = false;
             if (lineLower.includes('планируемые доходы') || lineLower.includes('плановые доходы')) {
                 currentSection = 'incomes';
                 continue;
@@ -118,7 +116,6 @@ function parsePlanMarkdown(content) {
             // Если встретили другие секции (Баланс, Заметки), сбрасываем секцию
             if (lineLower.includes('баланс') || lineLower.includes('заметки')) {
                 currentSection = null;
-                inTable = false;
                 continue;
             }
         }
@@ -127,55 +124,50 @@ function parsePlanMarkdown(content) {
         if (line.startsWith('|') && !line.startsWith('|---')) {
             const cells = line.split('|').map(c => c.trim()).filter(c => c);
             
+            if (cells.length < 3) continue;
+            
             // Пропускаем строки "Итого" - они не являются данными
-            if (cells.length >= 1 && lineLower.includes('итого')) {
+            if (lineLower.includes('итого')) {
                 continue;
             }
             
-            // Определяем, это заголовок таблицы или данные
+            // Пропускаем заголовки таблиц
             const isHeader = (lineLower.includes('дата') && lineLower.includes('источник') && lineLower.includes('сумма')) ||
                             (lineLower.includes('категория') && lineLower.includes('сумма'));
-            
             if (isHeader) {
-                inTable = true;
                 continue;
             }
             
-            // Если мы в таблице и это не заголовок, парсим данные
-            if (inTable && cells.length >= 3 && currentSection) {
-                if (currentSection === 'incomes') {
-                    incomes.push({
-                        date: cells[0] || '',
-                        source: cells[1] || '',
-                        amount: parseAmount(cells[2] || '0'),
-                        note: cells[3] || ''
-                    });
-                } else if (currentSection === 'expenses') {
-                    expenses.push({
-                        category: cells[0] || '',
-                        amount: parseAmount(cells[1] || '0'),
-                        due_date: cells[2] || '',
-                        note: cells[3] || ''
-                    });
-                } else if (currentSection === 'paid') {
-                    paidExpenses.push({
-                        category: cells[0] || '',
-                        amount: parseAmount(cells[1] || '0'),
-                        date_paid: cells[2] || '',
-                        note: cells[3] || ''
-                    });
-                } else if (currentSection === 'remaining') {
-                    remainingExpenses.push({
-                        category: cells[0] || '',
-                        amount: parseAmount(cells[1] || '0'),
-                        due_date: cells[2] || '',
-                        note: cells[3] || ''
-                    });
-                }
+            // Парсим данные в зависимости от текущей секции
+            if (currentSection === 'incomes') {
+                incomes.push({
+                    date: cells[0] || '',
+                    source: cells[1] || '',
+                    amount: parseAmount(cells[2] || '0'),
+                    note: cells[3] || ''
+                });
+            } else if (currentSection === 'expenses') {
+                expenses.push({
+                    category: cells[0] || '',
+                    amount: parseAmount(cells[1] || '0'),
+                    due_date: cells[2] || '',
+                    note: cells[3] || ''
+                });
+            } else if (currentSection === 'paid') {
+                paidExpenses.push({
+                    category: cells[0] || '',
+                    amount: parseAmount(cells[1] || '0'),
+                    date_paid: cells[2] || '',
+                    note: cells[3] || ''
+                });
+            } else if (currentSection === 'remaining') {
+                remainingExpenses.push({
+                    category: cells[0] || '',
+                    amount: parseAmount(cells[1] || '0'),
+                    due_date: cells[2] || '',
+                    note: cells[3] || ''
+                });
             }
-        } else if (line.startsWith('|---')) {
-            // Разделитель таблицы - подтверждаем, что мы в таблице
-            inTable = true;
         }
     }
     
@@ -392,48 +384,69 @@ async function markExpenseAsPaid(year, month, category, amount, paymentDate) {
  */
 function addIncomeToMarkdown(content, incomeData) {
     const lines = content.split('\n');
-    let inIncomesSection = false;
-    let tableStartIndex = -1;
-    let tableEndIndex = -1;
-    let foundSeparator = false;
+    let incomesSectionStart = -1;
+    let tableHeaderIndex = -1;
+    let separatorIndex = -1;
+    let lastDataRowIndex = -1;
     
-    // Находим секцию доходов и таблицу
+    // Находим секцию доходов (только заголовок ##)
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         const lineLower = line.toLowerCase();
         
-        if (lineLower.includes('планируемые доходы') || lineLower.includes('плановые доходы') || (lineLower.includes('доходы') && !lineLower.includes('итого'))) {
-            inIncomesSection = true;
-            continue;
+        // Ищем заголовок секции доходов
+        if (line.startsWith('##') && !line.startsWith('###')) {
+            if (lineLower.includes('планируемые доходы') || lineLower.includes('плановые доходы')) {
+                incomesSectionStart = i;
+                continue;
+            }
+            // Если нашли другую секцию после доходов, останавливаемся
+            if (incomesSectionStart >= 0 && (lineLower.includes('расходы') || lineLower.includes('баланс') || lineLower.includes('заметки'))) {
+                break;
+            }
         }
         
-        if (inIncomesSection && line.startsWith('|') && lineLower.includes('дата') && lineLower.includes('источник') && lineLower.includes('сумма')) {
-            tableStartIndex = i;
-            continue;
-        }
-        
-        if (inIncomesSection && tableStartIndex >= 0 && line.startsWith('|---')) {
-            foundSeparator = true;
-            continue;
-        }
-        
-        // После разделителя отслеживаем строки данных
-        if (inIncomesSection && tableStartIndex >= 0 && foundSeparator) {
-            // Если это строка данных (начинается с | и не содержит "Итого")
-            if (line.startsWith('|') && !lineLower.includes('итого')) {
-                tableEndIndex = i; // Обновляем индекс последней строки данных
+        // Если мы в секции доходов
+        if (incomesSectionStart >= 0) {
+            // Ищем заголовок таблицы
+            if (line.startsWith('|') && lineLower.includes('дата') && lineLower.includes('источник') && lineLower.includes('сумма')) {
+                tableHeaderIndex = i;
                 continue;
             }
             
-            // Если нашли строку "Итого" или следующую секцию, заканчиваем
-            if (lineLower.includes('итого') || line.startsWith('##')) {
-                break;
+            // Ищем разделитель таблицы
+            if (tableHeaderIndex >= 0 && line.startsWith('|---')) {
+                separatorIndex = i;
+                continue;
+            }
+            
+            // После разделителя ищем строки данных
+            if (separatorIndex >= 0) {
+                if (line.startsWith('|') && !line.startsWith('|---')) {
+                    const lineLower = line.toLowerCase();
+                    // Пропускаем строку "Итого"
+                    if (lineLower.includes('итого')) {
+                        lastDataRowIndex = i - 1; // Последняя строка данных перед "Итого"
+                        break;
+                    }
+                    // Обновляем индекс последней строки данных
+                    lastDataRowIndex = i;
+                }
+                // Если встретили следующую секцию (##), останавливаемся
+                if (line.startsWith('##') && !line.startsWith('###')) {
+                    break;
+                }
             }
         }
     }
     
-    if (tableStartIndex < 0 || tableEndIndex < 0) {
+    if (incomesSectionStart < 0 || tableHeaderIndex < 0 || separatorIndex < 0) {
         throw new Error('Не удалось найти таблицу доходов в файле');
+    }
+    
+    // Если не нашли строки данных, вставляем после разделителя
+    if (lastDataRowIndex < 0) {
+        lastDataRowIndex = separatorIndex;
     }
     
     // Форматируем сумму с пробелами для тысяч
@@ -443,7 +456,7 @@ function addIncomeToMarkdown(content, incomeData) {
     const newRow = `| ${incomeData.date} | ${incomeData.source} | ${formattedAmount} | ${incomeData.note || ''} |`;
     
     // Вставляем новую строку после последней строки данных (перед "Итого")
-    lines.splice(tableEndIndex + 1, 0, newRow);
+    lines.splice(lastDataRowIndex + 1, 0, newRow);
     
     return lines.join('\n');
 }
