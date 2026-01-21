@@ -55,6 +55,18 @@ document.addEventListener('DOMContentLoaded', () => {
     
     document.getElementById('yearSelect').addEventListener('change', loadData);
     document.getElementById('monthSelect').addEventListener('change', loadData);
+    `document.getElementById('monthSelect').addEventListener('change', loadData);`):**
+
+```javascript
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+        if (window.TelegramWebApp && window.TelegramWebApp.isTelegram()) {
+            window.TelegramWebApp.haptic('impact', 'light');
+        }
+        window.Forms.showSettings();
+    });
+```
+
+---
 });
 
 async function loadData() {
