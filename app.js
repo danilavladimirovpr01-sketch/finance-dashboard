@@ -115,8 +115,7 @@ function updateDashboard(data) {
     
     // Обновляем таблицы
     updateIncomesTable(plan.incomes);
-    updateExpensesTable(plan.expenses);
-    updateRemainingTable(plan.remaining_expenses);
+    updateExpensesTable(plan.expenses, plan.paid_expenses);
     
     // Обновляем графики
     updateIncomeExpenseChart({ plan, fact });
@@ -143,7 +142,7 @@ function updateIncomesTable(incomes) {
     });
 }
 
-function updateExpensesTable(expenses) {
+function updateExpensesTable(expenses, paidExpenses = []) {
     const tbody = document.querySelector('#expensesTable tbody');
     tbody.innerHTML = '';
     
@@ -155,6 +154,14 @@ function updateExpensesTable(expenses) {
     const year = document.getElementById('yearSelect').value;
     const month = document.getElementById('monthSelect').value;
     
+    // Создаем Set оплаченных расходов для быстрой проверки
+    const paidSet = new Set();
+    paidExpenses.forEach(paid => {
+        const paidCategory = (paid.category || paid['Категория'] || '').replace(/\*\*/g, '').trim();
+        const paidAmount = paid.amount || parseAmount(paid['Сумма (руб.)'] || paid['Сумма'] || '0');
+        paidSet.add(`${paidCategory}_${paidAmount}`);
+    });
+    
     expenses.forEach(expense => {
         const category = expense.category || expense['Категория'] || '-';
         const amount = expense.amount || parseAmount(expense['Сумма (руб.)'] || expense['Сумма'] || '0');
@@ -163,13 +170,19 @@ function updateExpensesTable(expenses) {
         if (amount > 0) {
             const row = document.createElement('tr');
             const cleanCategory = category.replace(/\*\*/g, '');
+            const isPaid = paidSet.has(`${cleanCategory}_${amount}`);
+            
+            // Галочка неактивна (серая) по умолчанию, активна (зеленая) если оплачено
+            const buttonClass = isPaid ? 'btn-mark-paid active' : 'btn-mark-paid';
+            const buttonTitle = isPaid ? 'Оплачено' : 'Отметить как оплаченный';
+            
             row.innerHTML = `
                 <td>${cleanCategory}</td>
                 <td><strong>${formatCurrency(amount)}</strong></td>
                 <td>${date}</td>
                 <td>
-                    <button class="btn-mark-paid" onclick="markAsPaid('${cleanCategory}', ${amount})" 
-                            title="Отметить как оплаченный">✓</button>
+                    <button class="${buttonClass}" onclick="markAsPaid('${cleanCategory}', ${amount})" 
+                            title="${buttonTitle}">✓</button>
                 </td>
             `;
             tbody.appendChild(row);
@@ -177,41 +190,45 @@ function updateExpensesTable(expenses) {
     });
 }
 
-// Функция для отметки расхода как оплаченного
-window.markAsPaid = function(category, amount) {
+// Функция для отметки расхода как оплаченного (сразу без формы)
+window.markAsPaid = async function(category, amount) {
     const year = document.getElementById('yearSelect').value;
     const month = document.getElementById('monthSelect').value;
+    
     if (window.TelegramWebApp && window.TelegramWebApp.isTelegram()) {
         window.TelegramWebApp.haptic('impact', 'medium');
     }
-    window.Forms.showMarkAsPaid(year, month, category, amount, loadData);
+    
+    try {
+        // Проверяем наличие токена
+        const token = window.GitHubAPI.getGitHubToken();
+        if (!token) {
+            showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
+            window.Forms.showSettings();
+            return;
+        }
+        
+        // Получаем текущую дату в формате ДД.ММ.ГГГГ
+        const today = new Date();
+        const paymentDate = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`;
+        
+        // Отмечаем расход как оплаченный через GitHub API
+        showNotification('Отметка расхода как оплаченного...', 'info');
+        await window.GitHubAPI.markExpenseAsPaid(year, month, category, amount, paymentDate);
+        showNotification('Расход отмечен как оплаченный! Обновление данных...', 'success');
+        
+        // Ждем 2 секунды, чтобы GitHub успел обновить файл
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Перезагружаем данные с обходом кэша
+        await loadData(true);
+        
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showNotification(error.message || 'Ошибка при отметке расхода', 'error');
+    }
 };
 
-function updateRemainingTable(remaining) {
-    const tbody = document.querySelector('#remainingTable tbody');
-    tbody.innerHTML = '';
-    
-    if (remaining.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" class="loading">Нет данных</td></tr>';
-        return;
-    }
-    
-    remaining.forEach(item => {
-        const category = item.category || item['Категория'] || '-';
-        const amount = item.amount || parseAmount(item['Сумма (руб.)'] || item['Сумма'] || '0');
-        const date = item.due_date || item['Срок оплаты'] || item['Дата'] || '-';
-        
-        if (amount > 0) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${category.replace(/\*\*/g, '')}</td>
-                <td><strong>${formatCurrency(amount)}</strong></td>
-                <td>${date}</td>
-            `;
-            tbody.appendChild(row);
-        }
-    });
-}
 
 function updateIncomeExpenseChart(data) {
     const ctx = document.getElementById('incomeExpenseChart').getContext('2d');
