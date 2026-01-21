@@ -1,383 +1,359 @@
-/**
- * Формы для добавления/редактирования данных
- */
+// Используем GitHub API напрямую - без backend!
+// Читаем файлы напрямую из репозитория через GitHub Raw API
 
-// Редактирование включено - работает через GitHub API с токеном
-// Токен нужно ввести в настройках
+// Глобальные переменные для графиков
+let incomeExpenseChart = null;
+let expensesChart = null;
 
-/**
- * Форма добавления дохода
- */
-function showAddIncomeForm(year, month, onSuccess) {
-    const form = document.createElement('form');
-    form.innerHTML = `
-        <div class="form-group">
-            <label>Дата</label>
-            <input type="text" name="date" placeholder="ДД.ММ.ГГГГ" required 
-                   pattern="\\d{2}\\.\\d{2}\\.\\d{4}" />
-        </div>
-        <div class="form-group">
-            <label>Источник дохода</label>
-            <input type="text" name="source" placeholder="Например: Работа курьер" required />
-        </div>
-        <div class="form-group">
-            <label>Сумма (руб.)</label>
-            <input type="number" name="amount" placeholder="0" min="0" step="0.01" required />
-        </div>
-        <div class="form-group">
-            <label>Примечание</label>
-            <textarea name="note" rows="2" placeholder="Опционально"></textarea>
-        </div>
-    `;
+// Инициализация
+document.addEventListener('DOMContentLoaded', () => {
+    // Инициализируем Telegram Web App
+    if (window.TelegramWebApp) {
+        window.TelegramWebApp.init();
+    }
     
-    const modal = Modal.create('Добавить доход', form, [
-        {
-            text: 'Отмена',
-            className: 'btn-secondary',
-            onClick: () => {}
+    // Устанавливаем текущий месяц
+    const now = new Date();
+    document.getElementById('monthSelect').value = now.getMonth() + 1;
+    
+    // Проверяем параметры URL (для навигации из бота)
+    const urlParams = new URLSearchParams(window.location.search);
+    const page = urlParams.get('page');
+    if (page) {
+        // Можно добавить логику для разных страниц
+        console.log('Открыта страница:', page);
+    }
+    
+    // Загружаем данные
+    loadData();
+    
+    // Обработчики событий
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+        if (window.TelegramWebApp && window.TelegramWebApp.isTelegram()) {
+            window.TelegramWebApp.haptic('impact', 'light');
+        }
+        loadData(true); // Принудительное обновление с обходом кэша
+    });
+    
+    document.getElementById('addIncomeBtn').addEventListener('click', () => {
+        const year = document.getElementById('yearSelect').value;
+        const month = document.getElementById('monthSelect').value;
+        if (window.TelegramWebApp && window.TelegramWebApp.isTelegram()) {
+            window.TelegramWebApp.haptic('impact', 'light');
+        }
+        window.Forms.showAddIncome(year, month, loadData);
+    });
+    
+    document.getElementById('addExpenseBtn').addEventListener('click', () => {
+        const year = document.getElementById('yearSelect').value;
+        const month = document.getElementById('monthSelect').value;
+        if (window.TelegramWebApp && window.TelegramWebApp.isTelegram()) {
+            window.TelegramWebApp.haptic('impact', 'light');
+        }
+        window.Forms.showAddExpense(year, month, loadData);
+    });
+    
+    document.getElementById('yearSelect').addEventListener('change', loadData);
+    document.getElementById('monthSelect').addEventListener('change', loadData);
+    
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+        if (window.TelegramWebApp && window.TelegramWebApp.isTelegram()) {
+            window.TelegramWebApp.haptic('impact', 'light');
+        }
+        window.Forms.showSettings();
+    });
+});
+
+async function loadData(forceRefresh = false) {
+    const year = document.getElementById('yearSelect').value;
+    const month = document.getElementById('monthSelect').value;
+    
+    try {
+        showLoading(true);
+        
+        // Загружаем план и факт напрямую из GitHub
+        // Используем обход кэша, если forceRefresh = true
+        const [planData, factData] = await Promise.all([
+            window.GitHubAPI.getPlan(year, month, forceRefresh),
+            window.GitHubAPI.getFact(year, month, forceRefresh)
+        ]);
+        
+        // Объединяем данные в формат, который ожидает updateDashboard
+        const result = {
+            plan: planData || { incomes: [], expenses: [], paid_expenses: [], remaining_expenses: [] },
+            fact: factData || { incomes: [], expenses: [] }
+        };
+        
+        updateDashboard(result);
+        showLoading(false);
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showError('Не удалось загрузить данные из GitHub. Проверьте, что репозиторий доступен.');
+        showLoading(false);
+    }
+}
+
+// Делаем loadData доступной глобально для вызова из forms.js
+window.loadData = loadData;
+
+function updateDashboard(data) {
+    // data = { plan: {...}, fact: {...} }
+    const plan = data.plan || { incomes: [], expenses: [], paid_expenses: [], remaining_expenses: [] };
+    const fact = data.fact || { incomes: [], expenses: [] };
+    
+    // Вычисляем итоги
+    const totalIncome = plan.incomes.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const totalExpenses = plan.expenses.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const totalPaid = plan.paid_expenses.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const totalBalance = totalIncome - totalExpenses;
+    
+    // Обновляем карточки со статистикой
+    document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
+    document.getElementById('totalExpenses').textContent = formatCurrency(totalExpenses);
+    document.getElementById('totalPaid').textContent = formatCurrency(totalPaid);
+    document.getElementById('totalBalance').textContent = formatCurrency(totalBalance);
+    
+    // Обновляем таблицы
+    updateIncomesTable(plan.incomes);
+    updateExpensesTable(plan.expenses);
+    updateRemainingTable(plan.remaining_expenses);
+    
+    // Обновляем графики
+    updateIncomeExpenseChart({ plan, fact });
+    updateExpensesChart(plan.expenses);
+}
+
+function updateIncomesTable(incomes) {
+    const tbody = document.querySelector('#incomesTable tbody');
+    tbody.innerHTML = '';
+    
+    if (incomes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="loading">Нет данных</td></tr>';
+        return;
+    }
+    
+    incomes.forEach(income => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${income.date || income['Дата'] || income['Дата оплаты'] || '-'}</td>
+            <td>${income.source || income['Источник дохода'] || income['Источник'] || '-'}</td>
+            <td><strong>${formatCurrency(income.amount || parseAmount(income['Сумма (руб.)'] || income['Сумма'] || '0'))}</strong></td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function updateExpensesTable(expenses) {
+    const tbody = document.querySelector('#expensesTable tbody');
+    tbody.innerHTML = '';
+    
+    if (expenses.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="loading">Нет данных</td></tr>';
+        return;
+    }
+    
+    const year = document.getElementById('yearSelect').value;
+    const month = document.getElementById('monthSelect').value;
+    
+    expenses.forEach(expense => {
+        const category = expense.category || expense['Категория'] || '-';
+        const amount = expense.amount || parseAmount(expense['Сумма (руб.)'] || expense['Сумма'] || '0');
+        const date = expense.due_date || expense['Срок оплаты'] || expense['Дата'] || '-';
+        
+        if (amount > 0) {
+            const row = document.createElement('tr');
+            const cleanCategory = category.replace(/\*\*/g, '');
+            row.innerHTML = `
+                <td>${cleanCategory}</td>
+                <td><strong>${formatCurrency(amount)}</strong></td>
+                <td>${date}</td>
+                <td>
+                    <button class="btn-mark-paid" onclick="markAsPaid('${cleanCategory}', ${amount})" 
+                            title="Отметить как оплаченный">✓</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        }
+    });
+}
+
+// Функция для отметки расхода как оплаченного
+window.markAsPaid = function(category, amount) {
+    const year = document.getElementById('yearSelect').value;
+    const month = document.getElementById('monthSelect').value;
+    if (window.TelegramWebApp && window.TelegramWebApp.isTelegram()) {
+        window.TelegramWebApp.haptic('impact', 'medium');
+    }
+    window.Forms.showMarkAsPaid(year, month, category, amount, loadData);
+};
+
+function updateRemainingTable(remaining) {
+    const tbody = document.querySelector('#remainingTable tbody');
+    tbody.innerHTML = '';
+    
+    if (remaining.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="loading">Нет данных</td></tr>';
+        return;
+    }
+    
+    remaining.forEach(item => {
+        const category = item.category || item['Категория'] || '-';
+        const amount = item.amount || parseAmount(item['Сумма (руб.)'] || item['Сумма'] || '0');
+        const date = item.due_date || item['Срок оплаты'] || item['Дата'] || '-';
+        
+        if (amount > 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${category.replace(/\*\*/g, '')}</td>
+                <td><strong>${formatCurrency(amount)}</strong></td>
+                <td>${date}</td>
+            `;
+            tbody.appendChild(row);
+        }
+    });
+}
+
+function updateIncomeExpenseChart(data) {
+    const ctx = document.getElementById('incomeExpenseChart').getContext('2d');
+    
+    if (incomeExpenseChart) {
+        incomeExpenseChart.destroy();
+    }
+    
+    // Вычисляем итоги из plan
+    const plan = data.plan || { incomes: [], expenses: [], paid_expenses: [] };
+    const totalIncome = plan.incomes.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const totalExpenses = plan.expenses.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const totalPaid = plan.paid_expenses.reduce((sum, item) => sum + (item.amount || 0), 0);
+    
+    incomeExpenseChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Доходы', 'Расходы', 'Оплачено'],
+            datasets: [{
+                label: 'Сумма (₽)',
+                data: [
+                    totalIncome,
+                    totalExpenses,
+                    totalPaid
+                ],
+                backgroundColor: [
+                    '#10b981',
+                    '#ef4444',
+                    '#3b82f6'
+                ]
+            }]
         },
-        {
-            text: 'Добавить',
-            className: 'btn-primary',
-            onClick: async () => {
-                const formData = new FormData(form);
-                const data = {
-                    date: formData.get('date'),
-                    source: formData.get('source'),
-                    amount: parseFloat(formData.get('amount')),
-                    note: formData.get('note') || ''
-                };
-                
-                if (!data.date || !data.source || !data.amount) {
-                    showNotification('Заполните все обязательные поля', 'error');
-                    return;
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
                 }
-                
-                try {
-                    const token = window.GitHubAPI.getGitHubToken();
-                    if (!token) {
-                        showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
-                        showSettings();
-                        return;
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return formatCurrency(value);
+                        }
                     }
-                    
-                    showNotification('Добавление дохода...', 'info');
-                    await window.GitHubAPI.addIncomeToPlan(year, month, data);
-                    showNotification('Доход успешно добавлен!', 'success');
-                    
-                    if (onSuccess) onSuccess();
-                    Modal.close();
-                    
-                } catch (error) {
-                    console.error('Ошибка:', error);
-                    showNotification(error.message || 'Ошибка при добавлении дохода', 'error');
                 }
             }
         }
-    ]);
+    });
 }
 
-/**
- * Форма добавления расхода
- */
-function showAddExpenseForm(year, month, onSuccess) {
-    const form = document.createElement('form');
-    form.innerHTML = `
-        <div class="form-group">
-            <label>Категория</label>
-            <select name="category" required>
-                <option value="">Выберите категорию</option>
-                <option value="Продукты питания">Продукты питания</option>
-                <option value="Коммунальные услуги">Коммунальные услуги</option>
-                <option value="Аренда жилья">Аренда жилья</option>
-                <option value="Транспорт">Транспорт</option>
-                <option value="Кредит машина">Кредит машина</option>
-                <option value="Кредит Ирина">Кредит Ирина</option>
-                <option value="Кредитка Сбер">Кредитка Сбер</option>
-                <option value="Кредитка Тиньков">Кредитка Тиньков</option>
-                <option value="Платеж Дмитрию">Платеж Дмитрию</option>
-                <option value="Здоровье и медицина">Здоровье и медицина</option>
-                <option value="Образование">Образование</option>
-                <option value="Хобби и развлечения">Хобби и развлечения</option>
-                <option value="Спорт и фитнес">Спорт и фитнес</option>
-                <option value="Одежда и обувь">Одежда и обувь</option>
-                <option value="Красота и уход">Красота и уход</option>
-                <option value="Подарки">Подарки</option>
-                <option value="Электроника">Электроника</option>
-                <option value="Программное обеспечение">Программное обеспечение</option>
-                <option value="Непредвиденные расходы">Непредвиденные расходы</option>
-                <option value="Накопления">Накопления</option>
-                <option value="Инвестиции">Инвестиции</option>
-                <option value="Другое">Другое</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>Сумма (руб.)</label>
-            <input type="number" name="amount" placeholder="0" min="0" step="0.01" required />
-        </div>
-        <div class="form-group">
-            <label>Срок оплаты</label>
-            <input type="text" name="due_date" placeholder="ДД.ММ.ГГГГ" 
-                   pattern="\\d{2}\\.\\d{2}\\.\\d{4}" />
-        </div>
-        <div class="form-group">
-            <label>Примечание</label>
-            <textarea name="note" rows="2" placeholder="Опционально"></textarea>
-        </div>
-    `;
+function updateExpensesChart(expenses) {
+    const ctx = document.getElementById('expensesChart').getContext('2d');
     
-    const modal = Modal.create('Добавить расход', form, [
-        {
-            text: 'Отмена',
-            className: 'btn-secondary',
-            onClick: () => {}
-        },
-        {
-            text: 'Добавить',
-            className: 'btn-primary',
-            onClick: async () => {
-                const formData = new FormData(form);
-                const data = {
-                    category: formData.get('category'),
-                    amount: parseFloat(formData.get('amount')),
-                    due_date: formData.get('due_date') || '',
-                    note: formData.get('note') || ''
-                };
-                
-                if (!data.category || !data.amount) {
-                    showNotification('Заполните все обязательные поля', 'error');
-                    return;
-                }
-                
-                try {
-                    const token = window.GitHubAPI.getGitHubToken();
-                    if (!token) {
-                        showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
-                        showSettings();
-                        return;
-                    }
-                    
-                    showNotification('Добавление расхода...', 'info');
-                    await window.GitHubAPI.addExpenseToPlan(year, month, data);
-                    showNotification('Расход успешно добавлен!', 'success');
-                    
-                    if (onSuccess) onSuccess();
-                    Modal.close();
-                    
-                } catch (error) {
-                    console.error('Ошибка:', error);
-                    showNotification(error.message || 'Ошибка при добавлении расхода', 'error');
-                }
-            }
-        }
-    ]);
-}
-
-/**
- * Форма отметки расхода как оплаченного
- */
-function showMarkAsPaidForm(year, month, category, amount, onSuccess) {
-    const form = document.createElement('form');
-    form.innerHTML = `
-        <div class="form-group">
-            <label>Категория</label>
-            <input type="text" value="${category}" readonly />
-        </div>
-        <div class="form-group">
-            <label>Сумма (руб.)</label>
-            <input type="number" name="amount" value="${amount}" min="0" step="0.01" required />
-        </div>
-        <div class="form-group">
-            <label>Дата оплаты</label>
-            <input type="text" name="payment_date" placeholder="ДД.ММ.ГГГГ" 
-                   pattern="\\d{2}\\.\\d{2}\\.\\d{4}" />
-        </div>
-        <div class="form-group">
-            <label>Примечание</label>
-            <textarea name="note" rows="2" placeholder="Опционально"></textarea>
-        </div>
-    `;
-    
-    const modal = Modal.create('Отметить как оплаченный', form, [
-        {
-            text: 'Отмена',
-            className: 'btn-secondary',
-            onClick: () => {}
-        },
-        {
-            text: 'Отметить',
-            className: 'btn-primary',
-            onClick: async () => {
-                const formData = new FormData(form);
-                const data = {
-                    category: category,
-                    amount: parseFloat(formData.get('amount')),
-                    payment_date: formData.get('payment_date') || '',
-                    note: formData.get('note') || ''
-                };
-                
-                try {
-                    const token = window.GitHubAPI.getGitHubToken();
-                    if (!token) {
-                        showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
-                        showSettings();
-                        return;
-                    }
-                    
-                    showNotification('Отметка расхода как оплаченного...', 'info');
-                    await window.GitHubAPI.markExpenseAsPaid(year, month, data.category, data.amount, data.payment_date);
-                    showNotification('Расход отмечен как оплаченный!', 'success');
-                    
-                    if (onSuccess) onSuccess();
-                    Modal.close();
-                    
-                } catch (error) {
-                    console.error('Ошибка:', error);
-                    showNotification(error.message || 'Ошибка при отметке расхода', 'error');
-                }
-            }
-        }
-    ]);
-}
-
-/**
- * Показать уведомление
- */
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification notification-${type}`;
-    notification.textContent = message;
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
-        color: white;
-        padding: 12px 24px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        z-index: 2000;
-        animation: slideDown 0.3s ease;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.animation = 'slideUp 0.3s ease';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
-
-// Добавляем стили для форм
-const style = document.createElement('style');
-style.textContent = `
-    .form-group {
-        margin-bottom: 16px;
-    }
-    .form-group label {
-        display: block;
-        margin-bottom: 8px;
-        font-weight: 500;
-        color: var(--tg-theme-text-color, var(--text-color));
-    }
-    .form-group input,
-    .form-group select,
-    .form-group textarea {
-        width: 100%;
-        padding: 10px;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        font-size: 14px;
-        background: var(--tg-theme-bg-color, white);
-        color: var(--tg-theme-text-color, var(--text-color));
-        box-sizing: border-box;
-    }
-    .form-group input:focus,
-    .form-group select:focus,
-    .form-group textarea:focus {
-        outline: none;
-        border-color: var(--tg-theme-link-color, var(--primary-color));
-    }
-    .btn-primary {
-        background: var(--tg-theme-button-color, var(--primary-color));
-        color: var(--tg-theme-button-text-color, white);
-    }
-    .btn-secondary {
-        background: var(--tg-theme-secondary-bg-color, #f1f1f1);
-        color: var(--tg-theme-text-color, var(--text-color));
-    }
-    @keyframes slideDown {
-        from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
-        to { transform: translateX(-50%) translateY(0); opacity: 1; }
-    }
-    @keyframes slideUp {
-        from { transform: translateX(-50%) translateY(0); opacity: 1; }
-        to { transform: translateX(-50%) translateY(-100%); opacity: 0; }
-    }
-`;
-document.head.appendChild(style);
-
-/**
- * Показать настройки (для ввода GitHub токена)
- */
-function showSettings() {
-    const form = document.createElement('form');
-    const currentToken = window.GitHubAPI.getGitHubToken();
-    
-    form.innerHTML = `
-        <div class="form-group">
-            <label>GitHub Personal Access Token</label>
-            <input type="password" id="githubTokenInput" placeholder="ghp_xxxxxxxxxxxx" 
-                   value="${currentToken ? '••••••••' : ''}" />
-            <small style="color: var(--tg-theme-hint-color, #666); font-size: 12px; margin-top: 4px; display: block;">
-                Токен нужен для редактирования данных. Создайте токен на 
-                <a href="https://github.com/settings/tokens" target="_blank" style="color: var(--tg-theme-link-color, #3b82f6);">
-                    GitHub Settings → Developer settings → Personal access tokens
-                </a>
-                <br>Нужны права: <code>repo</code>
-            </small>
-        </div>
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="showTokenCheckbox" />
-                Показать токен
-            </label>
-        </div>
-    `;
-    
-    const tokenInput = form.querySelector('#githubTokenInput');
-    const showCheckbox = form.querySelector('#showTokenCheckbox');
-    
-    showCheckbox.addEventListener('change', () => {
-        tokenInput.type = showCheckbox.checked ? 'text' : 'password';
-        if (!showCheckbox.checked && currentToken) {
-            tokenInput.value = '••••••••';
-        } else if (showCheckbox.checked && currentToken) {
-            tokenInput.value = currentToken;
+    // Группируем расходы по категориям
+    const categories = {};
+    expenses.forEach(exp => {
+        const category = (exp.category || exp['Категория'] || '').replace(/\*\*/g, '').trim();
+        const amount = exp.amount || parseAmount(exp['Сумма (руб.)'] || exp['Сумма'] || '0');
+        
+        if (category && amount > 0) {
+            categories[category] = (categories[category] || 0) + amount;
         }
     });
     
-    const modal = Modal.create('⚙️ Настройки', form, [
-        { text: 'Отмена', className: 'btn-secondary', onClick: () => {} },
-        { text: 'Сохранить', className: 'btn-primary', onClick: () => {
-            const token = tokenInput.value.trim();
-            if (token && token !== '••••••••') {
-                window.GitHubAPI.setGitHubToken(token);
-                showNotification('Токен сохранен!', 'success');
-            } else if (!token) {
-                window.GitHubAPI.setGitHubToken('');
-                showNotification('Токен удален', 'info');
+    const labels = Object.keys(categories);
+    const values = Object.values(categories);
+    
+    if (expensesChart) {
+        expensesChart.destroy();
+    }
+    
+    if (labels.length === 0) {
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        return;
+    }
+    
+    expensesChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: values,
+                backgroundColor: [
+                    '#ef4444', '#f59e0b', '#10b981', '#3b82f6',
+                    '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'right'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + formatCurrency(context.parsed);
+                        }
+                    }
+                }
             }
-            Modal.close();
-        }}
-    ]);
+        }
+    });
 }
 
-// Экспорт
-window.Forms = {
-    showAddIncome: showAddIncomeForm,
-    showAddExpense: showAddExpenseForm,
-    showMarkAsPaid: showMarkAsPaidForm,
-    showSettings: showSettings
-};
+function parseAmount(text) {
+    if (!text) return 0;
+    const cleaned = String(text).replace(/[^\d,.]/g, '').replace(',', '.');
+    return parseFloat(cleaned) || 0;
+}
+
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: 'RUB',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(amount);
+}
+
+function showLoading(show) {
+    const loadingDiv = document.getElementById('loadingIndicator');
+    if (loadingDiv) {
+        loadingDiv.style.display = show ? 'block' : 'none';
+    }
+}
+
+function showError(message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'error';
+    errorDiv.textContent = message;
+    
+    const container = document.querySelector('.container');
+    const firstChild = container.querySelector('.dashboard') || container.querySelector('header');
+    if (firstChild) {
+        container.insertBefore(errorDiv, firstChild.nextSibling);
+        setTimeout(() => errorDiv.remove(), 5000);
+    }
+}
