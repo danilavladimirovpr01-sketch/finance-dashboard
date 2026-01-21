@@ -440,8 +440,13 @@ function addExpenseToMarkdown(content, expenseData) {
             continue;
         }
         
-        // Если нашли строку "Итого" или следующую секцию, заканчиваем
-        if (inExpensesSection && tableStartIndex >= 0 && (lineLower.includes('итого') || (line.startsWith('##') && !lineLower.includes('расходы')))) {
+        // Если нашли строку "Итого" - вставляем ПЕРЕД ней
+        if (inExpensesSection && tableStartIndex >= 0 && lineLower.includes('итого')) {
+            tableEndIndex = i - 1; // Вставляем перед строкой "Итого"
+            break;
+        }
+        // Если нашли следующую секцию (##), заканчиваем
+        if (inExpensesSection && tableStartIndex >= 0 && (line.startsWith('##') && !lineLower.includes('расходы'))) {
             tableEndIndex = i - 1;
             break;
         }
@@ -457,7 +462,7 @@ function addExpenseToMarkdown(content, expenseData) {
     // Создаем новую строку таблицы
     const newRow = `| ${expenseData.category} | ${formattedAmount} | ${expenseData.due_date || ''} | ${expenseData.note || ''} |`;
     
-    // Вставляем новую строку после заголовка таблицы
+    // Вставляем новую строку ПЕРЕД строкой "Итого" (или в конец таблицы, если "Итого" нет)
     lines.splice(tableEndIndex + 1, 0, newRow);
     
     return lines.join('\n');
