@@ -1,10 +1,10 @@
+```javascript
 /**
  * Формы для добавления/редактирования данных
  */
 
-// Редактирование временно отключено - работает только чтение через GitHub API
-// Для редактирования нужно будет добавить GitHub API с токеном
-const EDITING_ENABLED = false;
+// Редактирование включено - работает через GitHub API с токеном
+// Токен нужно ввести в настройках
 
 /**
  * Форма добавления дохода
@@ -56,17 +56,24 @@ function showAddIncomeForm(year, month, onSuccess) {
                 }
                 
                 try {
-                    // Редактирование временно отключено - работает только чтение
-                    alert('Редактирование временно недоступно.\n\nДанные читаются напрямую из GitHub. Для редактирования нужно настроить GitHub API с токеном (опционально).\n\nВы можете редактировать файлы напрямую в репозитории GitHub.');
-                    if (onSuccess) onSuccess();
-                    return;
+                    // Проверяем наличие токена
+                    const token = window.GitHubAPI.getGitHubToken();
+                    if (!token) {
+                        showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
+                        showSettings();
+                        return;
+                    }
                     
-                    /* Временно отключено - нужен backend или GitHub API с токеном
-                    // Код для редактирования будет добавлен позже
-                    */
+                    // Добавляем доход через GitHub API
+                    showNotification('Добавление дохода...', 'info');
+                    await window.GitHubAPI.addIncomeToPlan(year, month, data);
+                    showNotification('Доход успешно добавлен!', 'success');
+                    
                     if (onSuccess) onSuccess();
+                    Modal.close();
                     
                 } catch (error) {
+                    console.error('Ошибка:', error);
                     showNotification(error.message || 'Ошибка при добавлении дохода', 'error');
                 }
             }
@@ -147,10 +154,27 @@ function showAddExpenseForm(year, month, onSuccess) {
                     return;
                 }
                 
-                // Редактирование временно отключено
-                alert('Редактирование временно недоступно.\n\nДанные читаются напрямую из GitHub. Для редактирования нужно настроить GitHub API с токеном (опционально).\n\nВы можете редактировать файлы напрямую в репозитории GitHub.');
-                if (onSuccess) onSuccess();
-                return;
+                try {
+                    // Проверяем наличие токена
+                    const token = window.GitHubAPI.getGitHubToken();
+                    if (!token) {
+                        showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
+                        showSettings();
+                        return;
+                    }
+                    
+                    // Добавляем расход через GitHub API
+                    showNotification('Добавление расхода...', 'info');
+                    await window.GitHubAPI.addExpenseToPlan(year, month, data);
+                    showNotification('Расход успешно добавлен!', 'success');
+                    
+                    if (onSuccess) onSuccess();
+                    Modal.close();
+                    
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    showNotification(error.message || 'Ошибка при добавлении расхода', 'error');
+                }
             }
         }
     ]);
@@ -199,10 +223,27 @@ function showMarkAsPaidForm(year, month, category, amount, onSuccess) {
                     note: formData.get('note') || ''
                 };
                 
-                // Редактирование временно отключено
-                alert('Редактирование временно недоступно.\n\nДанные читаются напрямую из GitHub. Для редактирования нужно настроить GitHub API с токеном (опционально).\n\nВы можете редактировать файлы напрямую в репозитории GitHub.');
-                if (onSuccess) onSuccess();
-                return;
+                try {
+                    // Проверяем наличие токена
+                    const token = window.GitHubAPI.getGitHubToken();
+                    if (!token) {
+                        showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
+                        showSettings();
+                        return;
+                    }
+                    
+                    // Отмечаем расход как оплаченный через GitHub API
+                    showNotification('Отметка расхода как оплаченного...', 'info');
+                    await window.GitHubAPI.markExpenseAsPaid(year, month, data.category, data.amount, data.payment_date);
+                    showNotification('Расход отмечен как оплаченный!', 'success');
+                    
+                    if (onSuccess) onSuccess();
+                    Modal.close();
+                    
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    showNotification(error.message || 'Ошибка при отметке расхода', 'error');
+                }
             }
         }
     ]);
@@ -298,9 +339,98 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+/**
+ * Показать настройки (для ввода GitHub токена)
+ */
+function showSettings() {
+    const form = document.createElement('form');
+    const currentToken = window.GitHubAPI.getGitHubToken();
+    
+    form.innerHTML = `
+        <div class="form-group">
+            <label>GitHub Personal Access Token</label>
+            <input type="password" id="githubTokenInput" placeholder="ghp_xxxxxxxxxxxx" 
+                   value="${currentToken ? '••••••••' : ''}" />
+            <small style="color: var(--tg-theme-hint-color, #666); font-size: 12px; margin-top: 4px; display: block;">
+                Токен нужен для редактирования данных. Создайте токен на 
+                <a href="https://github.com/settings/tokens" target="_blank" style="color: var(--tg-theme-link-color, #3b82f6);">
+                    GitHub Settings → Developer settings → Personal access tokens
+                </a>
+                <br>Нужны права: <code>repo</code>
+            </small>
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="showTokenCheckbox" />
+                Показать токен
+            </label>
+        </div>
+    `;
+    
+    const tokenInput = form.querySelector('#githubTokenInput');
+    const showCheckbox = form.querySelector('#showTokenCheckbox');
+    
+    showCheckbox.addEventListener('change', () => {
+        tokenInput.type = showCheckbox.checked ? 'text' : 'password';
+        if (!showCheckbox.checked && currentToken) {
+            tokenInput.value = '••••••••';
+        } else if (showCheckbox.checked && currentToken) {
+            tokenInput.value = currentToken;
+        }
+    });
+    
+    const modal = Modal.create('⚙️ Настройки', form, [
+        {
+            text: 'Отмена',
+            className: 'btn-secondary',
+            onClick: () => {}
+        },
+        {
+            text: 'Сохранить',
+            className: 'btn-primary',
+            onClick: () => {
+                const token = tokenInput.value.trim();
+                if (token && token !== '••••••••') {
+                    window.GitHubAPI.setGitHubToken(token);
+                    showNotification('Токен сохранен!', 'success');
+                } else if (!token) {
+                    window.GitHubAPI.setGitHubToken('');
+                    showNotification('Токен удален', 'info');
+                }
+                Modal.close();
+            }
+        }
+    ]);
+}
+
 // Экспорт
 window.Forms = {
     showAddIncome: showAddIncomeForm,
     showAddExpense: showAddExpenseForm,
-    showMarkAsPaid: showMarkAsPaidForm
+    showMarkAsPaid: showMarkAsPaidForm,
+    showSettings: showSettings
 };
+```
+
+---
+
+## 3. index.html
+
+Откройте: https://github.com/danilavladimirovpr01-sketch/finance-dashboard/edit/main/index.html
+
+**Изменить только строку 37:**
+
+Найти:
+```html
+                <a href="analytics.html" class="btn-add">📊 Аналитика</a>
+            </div>
+```
+
+Заменить на:
+```html
+                <a href="analytics.html" class="btn-add">📊 Аналитика</a>
+                <button id="settingsBtn" class="btn-add">⚙️ Настройки</button>
+            </div>
+```
+
+---
