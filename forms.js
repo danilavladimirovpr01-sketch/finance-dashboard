@@ -308,6 +308,9 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
+// Делаем showNotification глобальной
+window.showNotification = showNotification;
+
 // Добавляем стили для форм
 const style = document.createElement('style');
 style.textContent = `
