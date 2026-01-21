@@ -533,13 +533,13 @@ function moveExpenseToPaid(content, category, amount, paymentDate) {
     
     // Находим строку расхода в таблице "Планируемые расходы"
     // Нормализуем категорию (убираем ** и пробелы)
-    const normalizedCategory = category.replace(/\*\*/g, '').trim();
-    // Форматируем сумму для поиска (с пробелами)
-    const formattedAmount = formatAmount(amount);
-    // Также ищем без пробелов
-    const amountWithoutSpaces = String(amount).replace(/\s/g, '');
+    const normalizedCategory = category.replace(/\*\*/g, '').trim().toLowerCase();
+    // Нормализуем сумму (убираем пробелы и сравниваем как число)
+    const normalizedAmount = parseAmount(String(amount));
     
     let inExpensesSection = false;
+    let foundSeparator = false;
+    
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         const lineLower = line.toLowerCase();
@@ -548,30 +548,54 @@ function moveExpenseToPaid(content, category, amount, paymentDate) {
         if (line.startsWith('##') && !line.startsWith('###')) {
             if (lineLower.includes('планируемые расходы') || lineLower.includes('плановые расходы')) {
                 inExpensesSection = true;
+                foundSeparator = false;
                 continue;
             }
             if (lineLower.includes('фактически оплаченные') || lineLower.includes('оплаченные расходы') || 
                 lineLower.includes('баланс') || lineLower.includes('заметки')) {
                 inExpensesSection = false;
+                foundSeparator = false;
                 continue;
             }
         }
         
-        // Ищем строку расхода только в секции планируемых расходов
-        if (inExpensesSection && line.startsWith('|') && !line.startsWith('|---')) {
-            // Убираем ** из категории в строке для сравнения
-            const lineWithoutBold = line.replace(/\*\*/g, '');
-            // Проверяем, что строка содержит категорию и сумму
-            if (lineWithoutBold.includes(normalizedCategory) && 
-                (line.includes(formattedAmount) || line.includes(amountWithoutSpaces))) {
-                expenseLineIndex = i;
-                break;
+        // Отмечаем разделитель таблицы
+        if (inExpensesSection && line.startsWith('|---')) {
+            foundSeparator = true;
+            continue;
+        }
+        
+        // Пропускаем заголовок таблицы
+        if (inExpensesSection && line.startsWith('|') && lineLower.includes('категория') && lineLower.includes('сумма')) {
+            continue;
+        }
+        
+        // Пропускаем строки "Итого"
+        if (inExpensesSection && lineLower.includes('итого')) {
+            continue;
+        }
+        
+        // Ищем строку расхода только в секции планируемых расходов после разделителя
+        if (inExpensesSection && foundSeparator && line.startsWith('|') && !line.startsWith('|---')) {
+            // Парсим строку таблицы
+            const cells = line.split('|').map(c => c.trim()).filter(c => c);
+            if (cells.length >= 2) {
+                // Нормализуем категорию из файла
+                const fileCategory = (cells[0] || '').replace(/\*\*/g, '').trim().toLowerCase();
+                // Парсим сумму из файла
+                const fileAmount = parseAmount(cells[1] || '0');
+                
+                // Сравниваем категорию и сумму
+                if (fileCategory === normalizedCategory && Math.abs(fileAmount - normalizedAmount) < 0.01) {
+                    expenseLineIndex = i;
+                    break;
+                }
             }
         }
     }
     
     if (expenseLineIndex < 0) {
-        throw new Error(`Расход не найден в таблице: ${category} - ${formattedAmount}`);
+        throw new Error(`Расход не найден в таблице: ${category} - ${formatAmount(amount)}`);
     }
     
     // Удаляем строку из планируемых расходов
