@@ -93,21 +93,22 @@ function parsePlanMarkdown(content) {
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
+        const lineLower = line.toLowerCase();
         
         // Определяем секцию
-        if (line.includes('Планируемые доходы') || line.includes('Доходы')) {
+        if (lineLower.includes('планируемые доходы') || lineLower.includes('плановые доходы') || lineLower === 'доходы' || lineLower.includes('доходы')) {
             currentSection = 'incomes';
             continue;
         }
-        if (line.includes('Планируемые расходы') || line.includes('Расходы')) {
+        if (lineLower.includes('планируемые расходы') || lineLower.includes('плановые расходы') || lineLower === 'расходы' || lineLower.includes('расходы')) {
             currentSection = 'expenses';
             continue;
         }
-        if (line.includes('Фактически оплаченные расходы') || line.includes('Оплаченные')) {
+        if (lineLower.includes('фактически оплаченные расходы') || lineLower.includes('оплаченные расходы') || lineLower.includes('оплаченные')) {
             currentSection = 'paid';
             continue;
         }
-        if (line.includes('Оставшиеся платежи') || line.includes('Осталось')) {
+        if (lineLower.includes('оставшиеся платежи') || lineLower.includes('осталось')) {
             currentSection = 'remaining';
             continue;
         }
@@ -170,12 +171,13 @@ function parseFactMarkdown(content) {
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
+        const lineLower = line.toLowerCase();
         
-        if (line.includes('Доходы') || line.includes('Фактические доходы')) {
+        if (lineLower.includes('доходы') || lineLower.includes('фактические доходы')) {
             currentSection = 'incomes';
             continue;
         }
-        if (line.includes('Расходы') || line.includes('Фактические расходы')) {
+        if (lineLower.includes('расходы') || lineLower.includes('фактические расходы')) {
             currentSection = 'expenses';
             continue;
         }
@@ -211,6 +213,7 @@ function parseFactMarkdown(content) {
  */
 function parseAmount(str) {
     if (!str) return 0;
+    // Убираем все кроме цифр и точки/запятой
     const cleaned = str.toString().replace(/[^\d.,]/g, '').replace(',', '.');
     const num = parseFloat(cleaned);
     return isNaN(num) ? 0 : num;
@@ -259,15 +262,24 @@ async function updateFileInGitHub(filePath, content, message) {
     }
     
     try {
+        // Получаем текущий SHA файла
         const sha = await getFileSha(filePath);
+        
+        // Кодируем содержимое в base64
         const encodedContent = btoa(unescape(encodeURIComponent(content)));
+        
         const url = `${GITHUB_API_BASE}/repos/${GITHUB_REPO}/contents/${filePath}`;
         const body = {
             message: message || `Update ${filePath}`,
             content: encodedContent,
             branch: GITHUB_BRANCH
         };
-        if (sha) body.sha = sha;
+        
+        // Если файл существует, добавляем SHA
+        if (sha) {
+            body.sha = sha;
+        }
+        
         const response = await fetch(url, {
             method: 'PUT',
             headers: {
@@ -277,10 +289,12 @@ async function updateFileInGitHub(filePath, content, message) {
             },
             body: JSON.stringify(body)
         });
+        
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
         }
+        
         return await response.json();
     } catch (error) {
         console.error('Ошибка обновления файла в GitHub:', error);
@@ -293,9 +307,17 @@ async function updateFileInGitHub(filePath, content, message) {
  */
 async function addIncomeToPlan(year, month, incomeData) {
     const filePath = `${FINANCES_PATH}/${year}/Plans/Plan_${year}_${month.toString().padStart(2, '0')}.md`;
+    
+    // Загружаем текущий файл
     const currentContent = await getFileFromGitHub(filePath);
-    if (!currentContent) throw new Error('Файл плана не найден');
+    if (!currentContent) {
+        throw new Error('Файл плана не найден');
+    }
+    
+    // Парсим и добавляем новый доход
     const updatedContent = addIncomeToMarkdown(currentContent, incomeData);
+    
+    // Обновляем файл
     await updateFileInGitHub(filePath, updatedContent, `Добавлен доход: ${incomeData.source} - ${incomeData.amount} руб.`);
 }
 
@@ -304,9 +326,17 @@ async function addIncomeToPlan(year, month, incomeData) {
  */
 async function addExpenseToPlan(year, month, expenseData) {
     const filePath = `${FINANCES_PATH}/${year}/Plans/Plan_${year}_${month.toString().padStart(2, '0')}.md`;
+    
+    // Загружаем текущий файл
     const currentContent = await getFileFromGitHub(filePath);
-    if (!currentContent) throw new Error('Файл плана не найден');
+    if (!currentContent) {
+        throw new Error('Файл плана не найден');
+    }
+    
+    // Парсим и добавляем новый расход
     const updatedContent = addExpenseToMarkdown(currentContent, expenseData);
+    
+    // Обновляем файл
     await updateFileInGitHub(filePath, updatedContent, `Добавлен расход: ${expenseData.category} - ${expenseData.amount} руб.`);
 }
 
@@ -315,9 +345,17 @@ async function addExpenseToPlan(year, month, expenseData) {
  */
 async function markExpenseAsPaid(year, month, category, amount, paymentDate) {
     const filePath = `${FINANCES_PATH}/${year}/Plans/Plan_${year}_${month.toString().padStart(2, '0')}.md`;
+    
+    // Загружаем текущий файл
     const currentContent = await getFileFromGitHub(filePath);
-    if (!currentContent) throw new Error('Файл плана не найден');
+    if (!currentContent) {
+        throw new Error('Файл плана не найден');
+    }
+    
+    // Перемещаем расход из "Планируемые расходы" в "Фактически оплаченные расходы"
     const updatedContent = moveExpenseToPaid(currentContent, category, amount, paymentDate);
+    
+    // Обновляем файл
     await updateFileInGitHub(filePath, updatedContent, `Отмечен как оплаченный: ${category} - ${amount} руб.`);
 }
 
@@ -329,25 +367,47 @@ function addIncomeToMarkdown(content, incomeData) {
     let inIncomesSection = false;
     let tableStartIndex = -1;
     let tableEndIndex = -1;
+    
+    // Находим секцию доходов и таблицу
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (line.includes('Планируемые доходы') || (line.includes('Доходы') && !line.includes('Итого'))) {
-            inIncomesSection = true; continue;
+        const lineLower = line.toLowerCase();
+        
+        if (lineLower.includes('планируемые доходы') || lineLower.includes('плановые доходы') || (lineLower.includes('доходы') && !lineLower.includes('итого'))) {
+            inIncomesSection = true;
+            continue;
         }
-        if (inIncomesSection && line.startsWith('|') && line.includes('Дата') && line.includes('Источник')) {
-            tableStartIndex = i; continue;
+        
+        if (inIncomesSection && line.startsWith('|') && lineLower.includes('дата') && lineLower.includes('источник') && lineLower.includes('сумма')) {
+            tableStartIndex = i;
+            continue;
         }
+        
         if (inIncomesSection && tableStartIndex >= 0 && line.startsWith('|---')) {
-            tableEndIndex = i; continue;
+            tableEndIndex = i;
+            continue;
         }
-        if (inIncomesSection && tableStartIndex >= 0 && (line.includes('Итого') || line.startsWith('##'))) {
-            tableEndIndex = i - 1; break;
+        
+        // Если нашли строку "Итого" или следующую секцию, заканчиваем
+        if (inIncomesSection && tableStartIndex >= 0 && (lineLower.includes('итого') || line.startsWith('##'))) {
+            tableEndIndex = i - 1;
+            break;
         }
     }
-    if (tableStartIndex < 0 || tableEndIndex < 0) throw new Error('Не удалось найти таблицу доходов в файле');
+    
+    if (tableStartIndex < 0 || tableEndIndex < 0) {
+        throw new Error('Не удалось найти таблицу доходов в файле');
+    }
+    
+    // Форматируем сумму с пробелами для тысяч
     const formattedAmount = formatAmount(incomeData.amount);
+    
+    // Создаем новую строку таблицы
     const newRow = `| ${incomeData.date} | ${incomeData.source} | ${formattedAmount} | ${incomeData.note || ''} |`;
+    
+    // Вставляем новую строку после заголовка таблицы
     lines.splice(tableEndIndex + 1, 0, newRow);
+    
     return lines.join('\n');
 }
 
@@ -359,25 +419,47 @@ function addExpenseToMarkdown(content, expenseData) {
     let inExpensesSection = false;
     let tableStartIndex = -1;
     let tableEndIndex = -1;
+    
+    // Находим секцию расходов и таблицу
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (line.includes('Планируемые расходы') || (line.includes('Расходы') && !line.includes('Итого') && !line.includes('Оплаченные'))) {
-            inExpensesSection = true; continue;
+        const lineLower = line.toLowerCase();
+        
+        if (lineLower.includes('планируемые расходы') || lineLower.includes('плановые расходы') || (lineLower.includes('расходы') && !lineLower.includes('итого') && !lineLower.includes('оплаченные'))) {
+            inExpensesSection = true;
+            continue;
         }
-        if (inExpensesSection && line.startsWith('|') && line.includes('Категория') && line.includes('Сумма')) {
-            tableStartIndex = i; continue;
+        
+        if (inExpensesSection && line.startsWith('|') && lineLower.includes('категория') && lineLower.includes('сумма')) {
+            tableStartIndex = i;
+            continue;
         }
+        
         if (inExpensesSection && tableStartIndex >= 0 && line.startsWith('|---')) {
-            tableEndIndex = i; continue;
+            tableEndIndex = i;
+            continue;
         }
-        if (inExpensesSection && tableStartIndex >= 0 && (line.includes('Итого') || (line.startsWith('##') && !line.includes('Расходы')))) {
-            tableEndIndex = i - 1; break;
+        
+        // Если нашли строку "Итого" или следующую секцию, заканчиваем
+        if (inExpensesSection && tableStartIndex >= 0 && (lineLower.includes('итого') || (line.startsWith('##') && !lineLower.includes('расходы')))) {
+            tableEndIndex = i - 1;
+            break;
         }
     }
-    if (tableStartIndex < 0 || tableEndIndex < 0) throw new Error('Не удалось найти таблицу расходов в файле');
+    
+    if (tableStartIndex < 0 || tableEndIndex < 0) {
+        throw new Error('Не удалось найти таблицу расходов в файле');
+    }
+    
+    // Форматируем сумму с пробелами для тысяч
     const formattedAmount = formatAmount(expenseData.amount);
+    
+    // Создаем новую строку таблицы
     const newRow = `| ${expenseData.category} | ${formattedAmount} | ${expenseData.due_date || ''} | ${expenseData.note || ''} |`;
+    
+    // Вставляем новую строку после заголовка таблицы
     lines.splice(tableEndIndex + 1, 0, newRow);
+    
     return lines.join('\n');
 }
 
@@ -389,33 +471,69 @@ function moveExpenseToPaid(content, category, amount, paymentDate) {
     let expenseLineIndex = -1;
     let paidSectionStart = -1;
     let paidTableEnd = -1;
+    
+    // Находим строку расхода в таблице "Планируемые расходы"
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (line.includes(category) && line.includes(String(amount).replace(/\s/g, ''))) {
-            expenseLineIndex = i; break;
+            expenseLineIndex = i;
+            break;
         }
     }
-    if (expenseLineIndex < 0) throw new Error('Расход не найден в таблице');
+    
+    if (expenseLineIndex < 0) {
+        throw new Error('Расход не найден в таблице');
+    }
+    
+    // Удаляем строку из планируемых расходов
     const expenseLine = lines[expenseLineIndex];
     lines.splice(expenseLineIndex, 1);
+    
+    // Находим секцию "Фактически оплаченные расходы"
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (line.includes('Фактически оплаченные расходы') || line.includes('Оплаченные расходы')) { paidSectionStart = i; continue; }
-        if (paidSectionStart >= 0 && line.startsWith('|') && line.includes('Категория')) { continue; }
-        if (paidSectionStart >= 0 && line.startsWith('|---')) { paidTableEnd = i; continue; }
-        if (paidSectionStart >= 0 && paidTableEnd >= 0 && (line.startsWith('##') || line.includes('Оставшиеся'))) { paidTableEnd = i - 1; break; }
+        
+        if (line.includes('Фактически оплаченные расходы') || line.includes('Оплаченные расходы')) {
+            paidSectionStart = i;
+            continue;
+        }
+        
+        if (paidSectionStart >= 0 && line.startsWith('|') && line.includes('Категория')) {
+            continue;
+        }
+        
+        if (paidSectionStart >= 0 && line.startsWith('|---')) {
+            paidTableEnd = i;
+            continue;
+        }
+        
+        if (paidSectionStart >= 0 && paidTableEnd >= 0 && (line.startsWith('##') || line.includes('Оставшиеся'))) {
+            paidTableEnd = i - 1;
+            break;
+        }
     }
+    
     if (paidSectionStart < 0) {
+        // Если секции нет, создаем её
+        // Находим конец секции расходов
         let expensesEnd = -1;
         for (let i = 0; i < lines.length; i++) {
             if (lines[i].includes('Планируемые расходы')) {
                 for (let j = i; j < lines.length; j++) {
-                    if (lines[j].startsWith('##') && !lines[j].includes('Расходы')) { expensesEnd = j; break; }
+                    if (lines[j].startsWith('##') && !lines[j].includes('Расходы')) {
+                        expensesEnd = j;
+                        break;
+                    }
                 }
                 break;
             }
         }
-        if (expensesEnd < 0) expensesEnd = lines.length;
+        
+        if (expensesEnd < 0) {
+            expensesEnd = lines.length;
+        }
+        
+        // Добавляем новую секцию
         const newSection = [
             '',
             '## Фактически оплаченные расходы',
@@ -424,13 +542,17 @@ function moveExpenseToPaid(content, category, amount, paymentDate) {
             '|---|---|---|---|',
             `| ${category} | ${formatAmount(amount)} | ${paymentDate || new Date().toLocaleDateString('ru-RU')} | |`
         ];
+        
         lines.splice(expensesEnd, 0, ...newSection);
     } else {
+        // Парсим строку расхода и добавляем в секцию оплаченных
         const cells = expenseLine.split('|').map(c => c.trim()).filter(c => c);
         const newPaidRow = `| ${category} | ${formatAmount(amount)} | ${paymentDate || new Date().toLocaleDateString('ru-RU')} | ${cells[3] || ''} |`;
+        
         if (paidTableEnd >= 0) {
             lines.splice(paidTableEnd + 1, 0, newPaidRow);
         } else {
+            // Если нет таблицы, создаем её
             const tableHeader = [
                 '',
                 '| Категория | Сумма (руб.) | Дата оплаты | Примечание |',
@@ -440,6 +562,7 @@ function moveExpenseToPaid(content, category, amount, paymentDate) {
             lines.splice(paidSectionStart + 1, 0, ...tableHeader);
         }
     }
+    
     return lines.join('\n');
 }
 
