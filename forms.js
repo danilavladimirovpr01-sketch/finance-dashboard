@@ -1,4 +1,3 @@
-```javascript
 /**
  * Формы для добавления/редактирования данных
  */
@@ -49,14 +48,12 @@ function showAddIncomeForm(year, month, onSuccess) {
                     note: formData.get('note') || ''
                 };
                 
-                // Валидация
                 if (!data.date || !data.source || !data.amount) {
                     showNotification('Заполните все обязательные поля', 'error');
                     return;
                 }
                 
                 try {
-                    // Проверяем наличие токена
                     const token = window.GitHubAPI.getGitHubToken();
                     if (!token) {
                         showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
@@ -64,7 +61,6 @@ function showAddIncomeForm(year, month, onSuccess) {
                         return;
                     }
                     
-                    // Добавляем доход через GitHub API
                     showNotification('Добавление дохода...', 'info');
                     await window.GitHubAPI.addIncomeToPlan(year, month, data);
                     showNotification('Доход успешно добавлен!', 'success');
@@ -148,14 +144,12 @@ function showAddExpenseForm(year, month, onSuccess) {
                     note: formData.get('note') || ''
                 };
                 
-                // Валидация
                 if (!data.category || !data.amount) {
                     showNotification('Заполните все обязательные поля', 'error');
                     return;
                 }
                 
                 try {
-                    // Проверяем наличие токена
                     const token = window.GitHubAPI.getGitHubToken();
                     if (!token) {
                         showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
@@ -163,7 +157,6 @@ function showAddExpenseForm(year, month, onSuccess) {
                         return;
                     }
                     
-                    // Добавляем расход через GitHub API
                     showNotification('Добавление расхода...', 'info');
                     await window.GitHubAPI.addExpenseToPlan(year, month, data);
                     showNotification('Расход успешно добавлен!', 'success');
@@ -224,7 +217,6 @@ function showMarkAsPaidForm(year, month, category, amount, onSuccess) {
                 };
                 
                 try {
-                    // Проверяем наличие токена
                     const token = window.GitHubAPI.getGitHubToken();
                     if (!token) {
                         showNotification('GitHub токен не установлен. Пожалуйста, введите токен в настройках.', 'error');
@@ -232,7 +224,6 @@ function showMarkAsPaidForm(year, month, category, amount, onSuccess) {
                         return;
                     }
                     
-                    // Отмечаем расход как оплаченный через GitHub API
                     showNotification('Отметка расхода как оплаченного...', 'info');
                     await window.GitHubAPI.markExpenseAsPaid(year, month, data.category, data.amount, data.payment_date);
                     showNotification('Расход отмечен как оплаченный!', 'success');
@@ -317,24 +308,12 @@ style.textContent = `
         color: var(--tg-theme-text-color, var(--text-color));
     }
     @keyframes slideDown {
-        from {
-            transform: translateX(-50%) translateY(-100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(-50%) translateY(0);
-            opacity: 1;
-        }
+        from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+        to { transform: translateX(-50%) translateY(0); opacity: 1; }
     }
     @keyframes slideUp {
-        from {
-            transform: translateX(-50%) translateY(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(-50%) translateY(-100%);
-            opacity: 0;
-        }
+        from { transform: translateX(-50%) translateY(0); opacity: 1; }
+        to { transform: translateX(-50%) translateY(-100%); opacity: 0; }
     }
 `;
 document.head.appendChild(style);
@@ -380,26 +359,18 @@ function showSettings() {
     });
     
     const modal = Modal.create('⚙️ Настройки', form, [
-        {
-            text: 'Отмена',
-            className: 'btn-secondary',
-            onClick: () => {}
-        },
-        {
-            text: 'Сохранить',
-            className: 'btn-primary',
-            onClick: () => {
-                const token = tokenInput.value.trim();
-                if (token && token !== '••••••••') {
-                    window.GitHubAPI.setGitHubToken(token);
-                    showNotification('Токен сохранен!', 'success');
-                } else if (!token) {
-                    window.GitHubAPI.setGitHubToken('');
-                    showNotification('Токен удален', 'info');
-                }
-                Modal.close();
+        { text: 'Отмена', className: 'btn-secondary', onClick: () => {} },
+        { text: 'Сохранить', className: 'btn-primary', onClick: () => {
+            const token = tokenInput.value.trim();
+            if (token && token !== '••••••••') {
+                window.GitHubAPI.setGitHubToken(token);
+                showNotification('Токен сохранен!', 'success');
+            } else if (!token) {
+                window.GitHubAPI.setGitHubToken('');
+                showNotification('Токен удален', 'info');
             }
-        }
+            Modal.close();
+        }}
     ]);
 }
 
@@ -410,27 +381,3 @@ window.Forms = {
     showMarkAsPaid: showMarkAsPaidForm,
     showSettings: showSettings
 };
-```
-
----
-
-## 3. index.html
-
-Откройте: https://github.com/danilavladimirovpr01-sketch/finance-dashboard/edit/main/index.html
-
-**Изменить только строку 37:**
-
-Найти:
-```html
-                <a href="analytics.html" class="btn-add">📊 Аналитика</a>
-            </div>
-```
-
-Заменить на:
-```html
-                <a href="analytics.html" class="btn-add">📊 Аналитика</a>
-                <button id="settingsBtn" class="btn-add">⚙️ Настройки</button>
-            </div>
-```
-
----
