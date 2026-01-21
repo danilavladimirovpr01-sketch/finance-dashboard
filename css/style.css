@@ -128,13 +128,15 @@ button:active {
 }
 
 .btn-mark-paid {
-    background: var(--income-color);
+    background: #9ca3af;
     color: white;
     border: none;
     border-radius: 4px;
     padding: 4px 8px;
     cursor: pointer;
     font-size: 14px;
+    opacity: 0.6;
+    transition: all 0.2s;
 }
 
 .btn-mark-paid:hover {
@@ -143,6 +145,12 @@ button:active {
 
 .btn-mark-paid:active {
     transform: scale(0.95);
+}
+
+.btn-mark-paid.active {
+    background: var(--income-color);
+    opacity: 1;
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
 }
 
 .btn-back {
