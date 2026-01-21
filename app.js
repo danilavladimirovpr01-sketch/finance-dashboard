@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const page = urlParams.get('page');
     if (page) {
+        // Можно добавить логику для разных страниц
         console.log('Открыта страница:', page);
     }
     
@@ -31,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.TelegramWebApp && window.TelegramWebApp.isTelegram()) {
             window.TelegramWebApp.haptic('impact', 'light');
         }
-        loadData();
+        loadData(true); // Принудительное обновление с обходом кэша
     });
     
     document.getElementById('addIncomeBtn').addEventListener('click', () => {
@@ -63,18 +64,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-async function loadData() {
+async function loadData(forceRefresh = false) {
     const year = document.getElementById('yearSelect').value;
     const month = document.getElementById('monthSelect').value;
     
     try {
         showLoading(true);
         
+        // Загружаем план и факт напрямую из GitHub
+        // Используем обход кэша, если forceRefresh = true
         const [planData, factData] = await Promise.all([
-            window.GitHubAPI.getPlan(year, month),
-            window.GitHubAPI.getFact(year, month)
+            window.GitHubAPI.getPlan(year, month, forceRefresh),
+            window.GitHubAPI.getFact(year, month, forceRefresh)
         ]);
         
+        // Объединяем данные в формат, который ожидает updateDashboard
         const result = {
             plan: planData || { incomes: [], expenses: [], paid_expenses: [], remaining_expenses: [] },
             fact: factData || { incomes: [], expenses: [] }
@@ -89,24 +93,32 @@ async function loadData() {
     }
 }
 
+// Делаем loadData доступной глобально для вызова из forms.js
+window.loadData = loadData;
+
 function updateDashboard(data) {
+    // data = { plan: {...}, fact: {...} }
     const plan = data.plan || { incomes: [], expenses: [], paid_expenses: [], remaining_expenses: [] };
     const fact = data.fact || { incomes: [], expenses: [] };
     
+    // Вычисляем итоги
     const totalIncome = plan.incomes.reduce((sum, item) => sum + (item.amount || 0), 0);
     const totalExpenses = plan.expenses.reduce((sum, item) => sum + (item.amount || 0), 0);
     const totalPaid = plan.paid_expenses.reduce((sum, item) => sum + (item.amount || 0), 0);
     const totalBalance = totalIncome - totalExpenses;
     
+    // Обновляем карточки со статистикой
     document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
     document.getElementById('totalExpenses').textContent = formatCurrency(totalExpenses);
     document.getElementById('totalPaid').textContent = formatCurrency(totalPaid);
     document.getElementById('totalBalance').textContent = formatCurrency(totalBalance);
     
+    // Обновляем таблицы
     updateIncomesTable(plan.incomes);
     updateExpensesTable(plan.expenses);
     updateRemainingTable(plan.remaining_expenses);
     
+    // Обновляем графики
     updateIncomeExpenseChart({ plan, fact });
     updateExpensesChart(plan.expenses);
 }
@@ -204,8 +216,11 @@ function updateRemainingTable(remaining) {
 function updateIncomeExpenseChart(data) {
     const ctx = document.getElementById('incomeExpenseChart').getContext('2d');
     
-    if (incomeExpenseChart) incomeExpenseChart.destroy();
+    if (incomeExpenseChart) {
+        incomeExpenseChart.destroy();
+    }
     
+    // Вычисляем итоги из plan
     const plan = data.plan || { incomes: [], expenses: [], paid_expenses: [] };
     const totalIncome = plan.incomes.reduce((sum, item) => sum + (item.amount || 0), 0);
     const totalExpenses = plan.expenses.reduce((sum, item) => sum + (item.amount || 0), 0);
@@ -217,18 +232,34 @@ function updateIncomeExpenseChart(data) {
             labels: ['Доходы', 'Расходы', 'Оплачено'],
             datasets: [{
                 label: 'Сумма (₽)',
-                data: [totalIncome, totalExpenses, totalPaid],
-                backgroundColor: ['#10b981', '#ef4444', '#3b82f6']
+                data: [
+                    totalIncome,
+                    totalExpenses,
+                    totalPaid
+                ],
+                backgroundColor: [
+                    '#10b981',
+                    '#ef4444',
+                    '#3b82f6'
+                ]
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: true,
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
             scales: {
                 y: {
                     beginAtZero: true,
-                    ticks: { callback: value => formatCurrency(value) }
+                    ticks: {
+                        callback: function(value) {
+                            return formatCurrency(value);
+                        }
+                    }
                 }
             }
         }
@@ -237,27 +268,56 @@ function updateIncomeExpenseChart(data) {
 
 function updateExpensesChart(expenses) {
     const ctx = document.getElementById('expensesChart').getContext('2d');
+    
+    // Группируем расходы по категориям
     const categories = {};
     expenses.forEach(exp => {
         const category = (exp.category || exp['Категория'] || '').replace(/\*\*/g, '').trim();
         const amount = exp.amount || parseAmount(exp['Сумма (руб.)'] || exp['Сумма'] || '0');
-        if (category && amount > 0) categories[category] = (categories[category] || 0) + amount;
+        
+        if (category && amount > 0) {
+            categories[category] = (categories[category] || 0) + amount;
+        }
     });
+    
     const labels = Object.keys(categories);
     const values = Object.values(categories);
     
-    if (expensesChart) expensesChart.destroy();
-    if (labels.length === 0) { ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); return; }
+    if (expensesChart) {
+        expensesChart.destroy();
+    }
+    
+    if (labels.length === 0) {
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        return;
+    }
     
     expensesChart = new Chart(ctx, {
         type: 'doughnut',
-        data: { labels, datasets: [{ data: values, backgroundColor: ['#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16'] }] },
+        data: {
+            labels: labels,
+            datasets: [{
+                data: values,
+                backgroundColor: [
+                    '#ef4444', '#f59e0b', '#10b981', '#3b82f6',
+                    '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'
+                ]
+            }]
+        },
         options: {
             responsive: true,
             maintainAspectRatio: true,
             plugins: {
-                legend: { position: 'right' },
-                tooltip: { callbacks: { label: ctx => `${ctx.label}: ${formatCurrency(ctx.parsed)}` } }
+                legend: {
+                    position: 'right'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + formatCurrency(context.parsed);
+                        }
+                    }
+                }
             }
         }
     });
@@ -280,13 +340,16 @@ function formatCurrency(amount) {
 
 function showLoading(show) {
     const loadingDiv = document.getElementById('loadingIndicator');
-    if (loadingDiv) loadingDiv.style.display = show ? 'block' : 'none';
+    if (loadingDiv) {
+        loadingDiv.style.display = show ? 'block' : 'none';
+    }
 }
 
 function showError(message) {
     const errorDiv = document.createElement('div');
     errorDiv.className = 'error';
     errorDiv.textContent = message;
+    
     const container = document.querySelector('.container');
     const firstChild = container.querySelector('.dashboard') || container.querySelector('header');
     if (firstChild) {
