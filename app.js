@@ -24,8 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Открыта страница:', page);
     }
     
-    // Загружаем данные
-    loadData();
+    // Загружаем данные с обходом кэша
+    loadData(true);
     
     // Обработчики событий
     document.getElementById('refreshBtn').addEventListener('click', () => {
