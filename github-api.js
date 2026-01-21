@@ -532,16 +532,46 @@ function moveExpenseToPaid(content, category, amount, paymentDate) {
     let paidTableEnd = -1;
     
     // Находим строку расхода в таблице "Планируемые расходы"
+    // Нормализуем категорию (убираем ** и пробелы)
+    const normalizedCategory = category.replace(/\*\*/g, '').trim();
+    // Форматируем сумму для поиска (с пробелами)
+    const formattedAmount = formatAmount(amount);
+    // Также ищем без пробелов
+    const amountWithoutSpaces = String(amount).replace(/\s/g, '');
+    
+    let inExpensesSection = false;
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (line.includes(category) && line.includes(String(amount).replace(/\s/g, ''))) {
-            expenseLineIndex = i;
-            break;
+        const lineLower = line.toLowerCase();
+        
+        // Определяем, что мы в секции расходов
+        if (line.startsWith('##') && !line.startsWith('###')) {
+            if (lineLower.includes('планируемые расходы') || lineLower.includes('плановые расходы')) {
+                inExpensesSection = true;
+                continue;
+            }
+            if (lineLower.includes('фактически оплаченные') || lineLower.includes('оплаченные расходы') || 
+                lineLower.includes('баланс') || lineLower.includes('заметки')) {
+                inExpensesSection = false;
+                continue;
+            }
+        }
+        
+        // Ищем строку расхода только в секции планируемых расходов
+        if (inExpensesSection && line.startsWith('|') && !line.startsWith('|---')) {
+            // Убираем ** из категории в строке для сравнения
+            const lineWithoutBold = line.replace(/\*\*/g, '');
+            // Проверяем, что строка содержит категорию и сумму
+            if (lineWithoutBold.includes(normalizedCategory) && 
+                (line.includes(formattedAmount) || line.includes(amountWithoutSpaces))) {
+                expenseLineIndex = i;
+                break;
+            }
         }
     }
     
     if (expenseLineIndex < 0) {
-        throw new Error('Расход не найден в таблице');
+        throw new Error(`Расход не найден в таблице: ${category} - ${formattedAmount}`);
     }
     
     // Удаляем строку из планируемых расходов
